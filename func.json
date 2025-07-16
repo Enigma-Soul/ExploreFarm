@@ -1,0 +1,3 @@
+{
+	"test" : ["clear","build","set land land test_folder/land 25","set seeds seeds:wheat test_folder/seeds 20","set bucket bucket test_folder","set water water test_folder","set hoe hoe test_folder"]
+}
