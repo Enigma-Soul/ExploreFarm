@@ -6,6 +6,12 @@ class Lnk:
     def __init__(self, target_file, icon_path):
         self.target_file = target_file
         self.icon_path = icon_path
+        self.debug = False
+
+        if self.debug:
+            self.window_mode = "Normal"
+        else:
+            self.window_mode = "Minimized"
 
     def create(self,name,path,argv,description,icon):
         path = abspath(path)
@@ -19,7 +25,7 @@ class Lnk:
             icon_file=join(self.icon_path,icon),
             icon_index=0,
             work_dir=None,
-            window_mode='Minimized'
+            window_mode=self.window_mode
         )
         lnk.save()
     def read(self,path):
@@ -56,7 +62,7 @@ class Lnk:
             icon_file=join(self.icon_path,new_icon),
             icon_index=0,
             work_dir=None,
-            window_mode='Minimized'
+            window_mode=self.window_mode
             )
         lnk.save()
         copyfile(temp,path)

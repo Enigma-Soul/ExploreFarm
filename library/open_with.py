@@ -1,203 +1,225 @@
 from os import listdir, remove
-from os.path import abspath, dirname, join, basename
-
+from os.path import dirname, join, basename
+from json import dumps
 
 class open_with:
-    def __init__(self, lnk, lnk_uid, config, running_path):
+    def __init__(self, lnk, config, running_path,tools,refresh):
         self.lnk = lnk
-        self.lnk_uid = lnk_uid
         self.config = config
         self.running_path = running_path
+        self.tools = tools
+        self.refresh = refresh
 
-    def __get_uid_by_file(self, file):
-        return self.lnk.read(file)["arguments"][2:]
-
-    def __get_type_by_uid(self, uid):
-        return self.lnk_uid.get(uid)["type"]
-
-    def __get_full_path_by_uid(self, uid):
-        return self.lnk_uid.get(uid)["path"]
-
-    def __get_path_by_uid(self, uid):
-        return dirname(self.lnk_uid.get(uid)["path"])
-
-    def __get_nbt_by_uid(self, uid):
-        return self.lnk_uid.get(uid)["nbt"]
-
-    def __change_type(self, uid, new_type, new_nbt):
-        self.lnk_uid.data[uid]["type"] = new_type
-        self.lnk_uid.data[uid]["nbt"] = new_nbt
+    def __change_type(self, data, new_type, new_nbt):
+        data["type"] = new_type
+        data["nbt"].update(new_nbt)
         description = ""
         icon = join(self.running_path, "icons")
-        if "hoe" == self.get_raw_type(new_type):
+        if "hoe" == self.tools.raw_type(new_type):
             description = "一把锄头"
             icon = join(icon, "hoe.ico")
-        elif "bucket" == self.get_raw_type(new_type) and "water_bucket" not in new_type:
+        elif "bucket" == self.tools.raw_type(new_type) and "water_bucket" not in new_type:
             description = "一个桶"
             icon = join(icon, "bucket.ico")
-        elif "water_bucket" == self.get_raw_type(new_type):
+        elif "water_bucket" == self.tools.raw_type(new_type):
             description = "一个水桶"
             icon = join(icon, "water_bucket.ico")
-        elif "farmland" == self.get_raw_type(new_type):
+        elif "farmland" == self.tools.raw_type(new_type):
             if ":" in new_type:
                 description = f"一块{new_type.split(':')[1]}耕地"
                 icon = join(icon, f"{new_type.split(':')[1]}\\0.ico")
             else:
                 description = "一块耕地"
                 icon = join(icon, "farmland.ico")
-        elif "farmland_moist" == self.get_raw_type(new_type):
+        elif "farmland_moist" == self.tools.raw_type(new_type):
             if ":" in new_type:
                 description = f"湿润的{new_type.split(':')[1]}耕地"
                 icon = join(icon, f"{new_type.split(':')[1]}\\_0.ico")
             else:
                 description = "湿润耕地"
                 icon = join(icon, "farmland_moist.ico")
-        elif "land" == self.get_raw_type(new_type):
+        elif "land" == self.tools.raw_type(new_type):
             description = "一块土地"
             icon = join(icon, "dirt.ico")
-        elif "water" == self.get_raw_type(new_type):
+        elif "water" == self.tools.raw_type(new_type):
             description = "水源"
             icon = join(icon, "water.ico")
-        elif "seeds" == self.get_raw_type(new_type):
+        elif "seeds" == self.tools.raw_type(new_type):
             if ":" in new_type:
                 description = f"{new_type.split(':')[1]}种子"
                 icon = join(icon, f"{new_type.split(':')[1]}\\seeds.ico")
-        self.lnk.change(self.__get_full_path_by_uid(uid), description=description, icon=icon)
-        self.config.save()
 
-    def __water(self, master_uid):
-        for j in listdir(self.__get_path_by_uid(master_uid)):
-            j_uid = self.__get_uid_by_file(join(dirname(self.lnk_uid.get(master_uid)["path"]), j))
-            if "farmland" == self.get_raw_type(self.__get_type_by_uid(j_uid)):
-                if ":" in self.__get_type_by_uid(j_uid):
-                    self.__change_type(j_uid, "farmland_moist:" + self.__get_type_by_uid(j_uid).split(":")[1],
-                                       self.__get_nbt_by_uid(j_uid))
+        arguments = "ef"+self.tools.encode({"type":new_type,"path":data["path"],"nbt":data["nbt"]})
+        self.lnk.change(data["path"], description=description, icon=icon,argv=arguments)
+
+    def __water(self, master_data):
+        for j in listdir(dirname(master_data["path"])):
+            j_data = self.tools.data(join(dirname(master_data["path"]), j))
+            if "farmland" == self.tools.raw_type(j_data["type"]):
+                if ":" in j_data["type"]:
+                    self.__change_type(j_data, f"farmland_moist:{self.tools.seeds(j_data)}",j_data["nbt"])
                 else:
-                    self.__change_type(j_uid, "farmland_moist", self.__get_nbt_by_uid(j_uid))
+                    self.__change_type(j_data, "farmland_moist",j_data["nbt"])
 
 
-    def get_raw_type(self, type):
-        return type.split(":")[0]
+                # 更新 farmland 列表
+                farmland_list = self.config.get("farmland", [])
+                if not isinstance(farmland_list, list):
+                    farmland_list = []
+                if j_data.get("path") in farmland_list:
+                    farmland_list.remove(j_data["path"])
+                self.config["farmland"] = farmland_list
 
-    def __plant_seeds(self, farmland_uid, seeds_uids):
-        farmland_path = self.__get_path_by_uid(farmland_uid)
-        farm_dirs = listdir(farmland_path)
-        been = True if ":" in self.get_raw_type(farmland_uid) else False
+
+                # 更新 farmland_moist 列表
+                moist_list = self.config.get("farmland_moist", [])
+                if not isinstance(moist_list, list):
+                    moist_list = []
+                moist_list.append(j_data["path"])
+                self.config["farmland_moist"] = moist_list
+
+
+
+
+
+
+    def __plant_seeds(self, farmland_data, seeds_data):
+        def plant_one(farmland, seed):
+            name = ""
+            if "farmland" == self.tools.raw_type(farmland["type"]):
+                name = "farmland"
+            else:
+                name = "farmland_moist"
+
+            # 取出当前列表，如果没有就初始化为 []
+            current_list = self.config.get(name, [])
+            if not isinstance(current_list, list):
+                current_list = []
+            current_list += [farmland["path"]]
+            self.config[name] = current_list
+
+
+
+            # TODO Nbt修改种植速度等 增加资源包
+            self.__change_type(
+                farmland, f"{name}:{self.tools.seeds(seed)}",
+                {"total":100,"speed":1,"now":0})
+
+            path = seed["path"]
+            remove(path)
+
+
+
+        farmland_path = dirname(farmland_data["path"])
+        farm_lnks = listdir(farmland_path)
+        been = True if ":" in farmland_data["type"] else False
         cnt = 0
-        for seed_uid in seeds_uids:
-            seed_path = self.__get_full_path_by_uid(seed_uid)
-            if not seed_path or not self.__get_uid_by_file(seed_path):
-                continue
-            if cnt >= len(farm_dirs):
+
+        for seed in seeds_data:
+            if cnt >= len(farm_lnks):
                 break
-            farm_type = ""
-            if "farmland" == self.get_raw_type(self.__get_type_by_uid(self.__get_uid_by_file(join(farmland_path, farm_dirs[cnt])))):
-                farm_type = "farmland"
-            else:
-                farm_type = "farmland_moist"
-
             if been:
-                if ":" not in self.__get_type_by_uid(self.__get_uid_by_file(farm_dirs[cnt])):
-                    print(seed_uid,
-                          farm_type + ":" + self.__get_type_by_uid(self.__get_uid_by_file(seed_path)).split(":")[1],
-                          self.__get_nbt_by_uid(self.__get_uid_by_file(join(farmland_path, farm_dirs[cnt]))))
-                    self.__change_type(seed_uid,
-                                       farm_type+":" + self.__get_type_by_uid(self.__get_uid_by_file(seed_path)).split(":")[1],
-                                       self.__get_nbt_by_uid(self.__get_uid_by_file(join(farmland_path, farm_dirs[cnt]))))
-                    cnt += 1
-                    remove(seed_path)
-                    self.config.config.pop(seed_uid)
-                    self.lnk_uid.pop(seed_uid)
-                    self.config.save()
+                flag = False
+                for i in farm_lnks:
+                    i_type = self.tools.type(join(farmland_path, i))
+                    if "farmland" == self.tools.raw_type(i_type) or "farmland_moist" == self.tools.raw_type(i_type):
+                        if ":" not in i_type:
+                            plant_one(self.tools.data(join(farmland_path, i)), seed)
+                            cnt += 1
+                            flag = True
+                            break
+
+                if not flag:
+                    return
             else:
-                if ":" not in self.__get_type_by_uid(farmland_uid):
-                    print(seed_uid,
-                                       farm_type+":"+self.__get_type_by_uid(self.__get_uid_by_file(seed_path)).split(":")[1],
-                                       self.__get_nbt_by_uid(self.__get_uid_by_file(join(farmland_path, farm_dirs[cnt]))))
-                    self.__change_type(seed_uid,
-                                       farm_type+":"+self.__get_type_by_uid(self.__get_uid_by_file(seed_path)).split(":")[1],
-                                       self.__get_nbt_by_uid(self.__get_uid_by_file(join(farmland_path, farm_dirs[cnt]))))
+                if ":" not in farmland_data["type"]:
+                    plant_one(farmland_data, seed)
+
                 been = True
-                for j in range(len(farm_dirs)):
-                    if farm_dirs[j] == basename(seed_path):
-                        farm_dirs.pop(j)
+                for j in range(len(farm_lnks)):
+                    if farm_lnks[j] == basename(farmland_data["path"]):
+                        farm_lnks.pop(j)
                         break
-                remove(seed_path)
-                self.config.config["lnk"].pop(seed_uid)
-                self.lnk_uid.pop(seed_uid)
-                self.config.save()
 
 
-    def run(self, uids):
-        if len(uids) == 0:
+
+    def run(self, datas):
+        if len(datas) == 0:
             return self
-        print("[*] Before ================")
-        for i in uids:
-            print(
-                f"{i}  {basename(self.__get_full_path_by_uid(i))}  {self.__get_type_by_uid(i)} {self.__get_nbt_by_uid(i)}")
-        print("[*] Before ================")
 
-        master = uids[0]
-        master_type = self.__get_type_by_uid(master)
+        for i in datas:
+            print(f"{i["path"]}  {i["type"]} {i["nbt"]}")
+        print("[*] Raws ========================================")
 
-        print(master_type)
+        master = datas[0]
+        master_type = master["type"]
 
-        if "hoe" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "land" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    self.__change_type(i, "farmland", self.__get_nbt_by_uid(i))
-        elif "bucket" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "water" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    self.__change_type(master, "water_bucket", self.__get_nbt_by_uid(i))
+        if "hoe" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "land" == self.tools.raw_type(i["type"]):
+                    self.__change_type(i, "farmland", i["nbt"])
+        elif "bucket" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "water" == self.tools.raw_type(i["type"]):
+                    self.__change_type(master, "water_bucket", i["nbt"])
                     break
-        elif "water_bucket" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "farmland" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    if ":" in self.__get_type_by_uid(i):
-                        self.__change_type(i, "farmland_moist:" + self.__get_type_by_uid(i).split(":")[1],
-                                           self.__get_nbt_by_uid(i))
+        elif "water_bucket" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "farmland" == self.tools.raw_type(i["type"]):
+                    if ":" in i["type"]:
+                        self.__change_type(i, "farmland_moist:" + i["type"].split(":")[1],
+                                           i["nbt"])
                     else:
-                        self.__change_type(i, "farmland_moist", self.__get_nbt_by_uid(i))
-        elif "land" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "hoe" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    self.__change_type(master, "farmland", self.__get_nbt_by_uid(i))
-        elif "water" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "bucket" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    self.__change_type(i, "water_bucket", self.__get_nbt_by_uid(i))
-        elif "farmland" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "water_bucket" == self.get_raw_type(self.__get_type_by_uid(i)):
+                        self.__change_type(i, "farmland_moist", i["nbt"])
+            self.__change_type(master, "bucket", master["nbt"])
+        elif "land" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "hoe" == self.tools.raw_type(i["type"]):
+                    self.__change_type(master, "farmland", i["nbt"])
+        elif "water" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "bucket" == self.tools.raw_type(i["type"]):
+                    self.__change_type(i, "water_bucket", i["nbt"])
+        elif "farmland" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "water_bucket" == self.tools.raw_type(i["type"]):
                     self.__water(master)
-                elif "seeds" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    if ":" not in master_type:
-                        self.__plant_seeds(master, [i])
-        elif "farmland_moist" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "water_bucket" == self.get_raw_type(self.__get_type_by_uid(i)):
+                    self.__change_type(i,"bucket",master["nbt"])
+                elif "seeds" == self.tools.raw_type(i["type"]):
+                    self.__plant_seeds(master, datas[datas.index(i):])
+                    break
+                elif "bone_meal" == self.tools.raw_type(i["type"]):
+                    if ":" in master_type:
+                        nbt = master["nbt"]
+                        nbt["now"] += 20
+                        self.__change_type(master, new_type="farmland:"+self.tools.seeds(master), new_nbt=nbt)
+                        remove(i["path"])
+                        break
+        elif "farmland_moist" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "water_bucket" == self.tools.raw_type(i["type"]):
                     self.__water(master)
-                elif "seeds" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    if ":" not in master_type:
-                        self.__plant_seeds(master, [i])
-        elif "bone_meal" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                pass
-        elif "seeds" == self.get_raw_type(master_type):
-            for i in uids[1:]:
-                if "farmland" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    self.__plant_seeds(i, [master])
-                elif "farmland_moist" == self.get_raw_type(self.__get_type_by_uid(i)):
-                    if ":" not in master_type:
-                        self.__plant_seeds(i, [master])
+                    self.__change_type(i, "bucket", master["nbt"])
+                elif "seeds" == self.tools.raw_type(i["type"]):
+                    self.__plant_seeds(master, datas[datas.index(i):])
+                    break
+                elif "bone_meal" == self.tools.raw_type(i["type"]):
+                    if ":" in master_type:
+                        nbt = master["nbt"]
+                        nbt["now"] += 20
+                        self.__change_type(master, new_type="farmland_moist:"+self.tools.seeds(master), new_nbt=nbt)
+                        remove(i["path"])
+                        break
+        elif "seeds" == self.tools.raw_type(master_type):
+            for i in datas[1:]:
+                if "farmland" == self.tools.raw_type(i["type"]):
+                    self.__plant_seeds(master, datas[datas.index(i):])
+                    break
+                elif "farmland_moist" == self.tools.raw_type(i["type"]):
+                    self.__plant_seeds(master, datas[datas.index(i):])
+                    break
         else:
             print(f"未知type:{master_type}")
 
-        print("[*] After ================")
-        for i in uids:
-            if self.lnk_uid.check(i):
-                print(
-                    f"{i}  {basename(self.__get_full_path_by_uid(i))}  {self.__get_type_by_uid(i)} {self.__get_nbt_by_uid(i)}")
 
-        print("[*] After ================")
+        self.refresh.refresh(True)
