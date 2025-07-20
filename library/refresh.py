@@ -21,10 +21,10 @@ class refresh:
                 self.refresh()
             except Exception as e:
                 cnt += 1
-                print(f"Refresh 已报错 {e}")
-                print(f"这是Refresh的第{cnt}次报错")
-                print("1秒钟后进行重新启动")
-                sleep(1)
+
+            if cnt %100 == 0:
+                print(f"[!] Refresh 进程已经重启了 {cnt} 次")
+                print(f"[!] 正在重新启动")
 
 
     def format(self,percent):
@@ -40,9 +40,12 @@ class refresh:
             except:
                 return False
         while True:
+            flag = False
+            self.config.load()
             for i in self.config["farmland"]: # 糖
                 if not check(i,"farmland"):
                     continue
+                flag = True
                 data = self.tools.data(i)
                 if ":" in data["type"]:
                     crop = self.tools.seeds(data)
@@ -68,8 +71,8 @@ class refresh:
                                     description=f"一个种着熟透了的的{crop}的农田")
             for i in self.config["farmland_moist"]:  # 糖
                 if not check(i,"farmland_moist"):
-                    print(1)
                     continue
+                flag = True
                 data = self.tools.data(i)
                 if ":" in data["type"]:
                     crop = self.tools.seeds(data)
@@ -92,6 +95,9 @@ class refresh:
                     p = self.config["seeds"].get(crop) - 1
                     self.lnk.change(data["path"], icon=f"{crop}\\_{p}.ico",
                                     description=f"一个种着熟透了的的{crop}的农田")
+            if not flag:
+                sleep(1)
+                raise TypeError("没有检测到农田 正在重新启动")
             if need_break:
                 break
             sleep(1)

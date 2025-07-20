@@ -194,7 +194,6 @@ class open_with:
                         nbt["now"] += 20
                         self.__change_type(master, new_type="farmland:"+self.tools.seeds(master), new_nbt=nbt)
                         remove(i["path"])
-                        break
         elif "farmland_moist" == self.tools.raw_type(master_type):
             for i in datas[1:]:
                 if "water_bucket" == self.tools.raw_type(i["type"]):
@@ -209,7 +208,6 @@ class open_with:
                         nbt["now"] += 20
                         self.__change_type(master, new_type="farmland_moist:"+self.tools.seeds(master), new_nbt=nbt)
                         remove(i["path"])
-                        break
         elif "seeds" == self.tools.raw_type(master_type):
             for i in datas[1:]:
                 if "farmland" == self.tools.raw_type(i["type"]):
