@@ -1,0 +1,22 @@
+{
+	"crops":{
+		"beetroot":{
+			"total": 80,
+			"total_range" :5,
+			"speed_day": 2,
+			"speed_moist": 1,
+			"watering_duration" : 86400,
+			"watering_range" : 60,
+			"last_watered" : 0
+		},
+		"wheat": {
+			"total": 100,
+			"total_range" :7,
+			"speed_day": 2,
+			"speed_moist": 1,
+			"watering_duration" : 86400,
+			"watering_range" : 30,
+			"last_watered" : 0
+		}
+	}
+}
